@@ -1,7 +1,35 @@
-# --- REEMPLAZA SOLO ESTA FUNCIÓN EN scrapers/utils.py ---
+# scrapers/utils.py
+import re
+import calendar
+import requests
+from datetime import datetime, date
+from dateutil import parser as duparser
+
+# User-Agent para evitar bloqueos tontos
+UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/122.0 Safari/537.36"
+)
+
+def fetch_html(url: str, timeout: int = 30) -> str:
+    """Descarga HTML con UA y timeout razonable."""
+    r = requests.get(url, timeout=timeout, headers={"User-Agent": UA})
+    r.raise_for_status()
+    return r.text
+
+MONTHS_ES = {
+    "enero":1,"febrero":2,"marzo":3,"abril":4,"mayo":5,"junio":6,"julio":7,"agosto":8,"septiembre":9,"setiembre":9,
+    "octubre":10,"noviembre":11,"diciembre":12,
+    "ene":1,"feb":2,"mar":3,"abr":4,"may":5,"jun":6,"jul":7,"ago":8,"sep":9,"oct":10,"nov":11,"dic":12
+}
+
+def last_day_of_month(year:int, month:int)->int:
+    return calendar.monthrange(year, month)[1]
+
 def parse_spanish_date_text(text:str, default_year=None):
     """
-    Devuelve: (inicio: date, fin: date, ocurrencias: list[date], all_day: bool)
+    Devuelve: (inicio: date|None, fin: date|None, ocurrencias: list[date], all_day: bool)
+
     Cobertura:
       - Del 01 de abril al 14 de septiembre de 2025
       - Del 04 al 11 de septiembre de 2025
@@ -12,20 +40,19 @@ def parse_spanish_date_text(text:str, default_year=None):
       - Junio —— diciembre 2025
       - 1 enero —— 21 diciembre 2025
       - 18 – 19 septiembre 2025
-      - Cualquier texto que contenga dos DD/MM/YYYY en cualquier posición
+      - Cualquier texto que contenga dos DD/MM/YYYY en cualquier parte
     """
     if not text:
         return None, None, [], True
 
     t = " ".join(
         text.lower()
-        .replace("\u2014","-")  # em dash
-        .replace("\u2013","-")  # en dash
+        .replace("\u2014","-").replace("\u2013","-")
         .replace("—","-").replace("–","-")
         .split()
     )
 
-    # 1) caso general robusto: si encontramos dos fechas DD/MM/YYYY en cualquier sitio, usamos la 1ª y la última
+    # 1) caso robusto: dos o más DD/MM/YYYY → usa 1º y último
     m_all = re.findall(r"(\d{1,2})/(\d{1,2})/(\d{4})", t)
     if len(m_all) >= 2:
         d1, m1, y1 = map(int, m_all[0])
@@ -82,7 +109,7 @@ def parse_spanish_date_text(text:str, default_year=None):
         d1, mon1, y1, d2, mon2, y2 = m.groups()
         return date(int(y1), MONTHS_ES[mon1], int(d1)), date(int(y2), MONTHS_ES[mon2], int(d2)), [], True
 
-    # 9) fallback
+    # 9) fallback genérico (día primero)
     try:
         dt = duparser.parse(text, dayfirst=True, default=duparser.parse(f"1/1/{default_year or datetime.now().year}"))
         d = dt.date()
