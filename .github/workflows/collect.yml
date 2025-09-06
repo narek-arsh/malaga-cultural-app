@@ -19,7 +19,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0         # necesario para rebase posterior
+          fetch-depth: 0
+          persist-credentials: true   # usa GITHUB_TOKEN
+          ref: ${{ github.ref_name }} # intenta chequear la rama origen
+
+      - name: Set BRANCH env
+        run: |
+          echo "BRANCH=${GITHUB_REF_NAME:-main}" >> $GITHUB_ENV
+          echo "Using branch: ${GITHUB_REF_NAME:-main}"
+
+      - name: Ensure on branch & up to date
+        run: |
+          git fetch origin
+          # Si estamos en detached HEAD, saltar a la rama
+          git checkout "$BRANCH" || git checkout -b "$BRANCH"
+          git pull --rebase --autostash origin "$BRANCH" || true
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -39,16 +53,21 @@ jobs:
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-
-          # Trae últimos cambios y rebasea para evitar rechazos
-          git fetch origin
-          git pull --rebase --autostash origin $GITHUB_REF_NAME || true
-
           git add data/catalog.jsonl data/sources/*.json || true
           if git diff --cached --quiet; then
             echo "No changes to commit."
+            exit 0
+          fi
+
+          # Rebase por si otro run ha metido algo entre medias
+          git pull --rebase --autostash origin "$BRANCH" || true
+
+          git commit -m "chore(data): update cultural catalog $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+
+          # Push normal
+          if git push origin HEAD:"$BRANCH"; then
+            echo "Pushed successfully."
           else
-            git commit -m "chore(data): update cultural catalog $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-            git push origin HEAD:$GITHUB_REF_NAME
+            echo "Normal push failed, trying --force-with-lease to resolve non-fast-forward..."
+            git push --force-with-lease origin HEAD:"$BRANCH"
           fi
