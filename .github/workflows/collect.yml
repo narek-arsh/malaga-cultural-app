@@ -2,7 +2,7 @@ name: Collect Cultural Data
 
 on:
   schedule:
-    - cron: '0 4 * * *'   # 06:00 Europe/Madrid (ajusta si quieres)
+    - cron: '0 4 * * *'   # 06:00 Europe/Madrid
   workflow_dispatch:
 
 jobs:
@@ -24,7 +24,7 @@ jobs:
 
       - name: Run collector
         run: |
-          python scrapers/collector.py
+          python -m scrapers.collector
 
       - name: Commit and push changes
         run: |
