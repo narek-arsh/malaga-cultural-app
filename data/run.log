@@ -1,12 +1,12 @@
-Run started: 2025-09-06T20:36:37Z
-Run finished: 2025-09-06T20:36:37Z
+Run started: 2025-09-06T20:38:22Z
+Run finished: 2025-09-06T20:38:22Z
 
 === DATA DIR LISTING ===
 total 40K
-drwxr-xr-x 3 runner docker 4.0K Sep  6 20:36 .
-drwxr-xr-x 8 runner docker 4.0K Sep  6 20:36 ..
--rw-r--r-- 1 runner docker  15K Sep  6 20:36 catalog.jsonl
--rw-r--r-- 1 runner docker    2 Sep  6 20:36 curated.json
--rw-r--r-- 1 runner docker  187 Sep  6 20:36 manual_events.csv
--rw-r--r-- 1 runner docker   95 Sep  6 20:36 run.log
-drwxr-xr-x 2 runner docker 4.0K Sep  6 20:36 sources
+drwxr-xr-x 3 runner docker 4.0K Sep  6 20:38 .
+drwxr-xr-x 8 runner docker 4.0K Sep  6 20:38 ..
+-rw-r--r-- 1 runner docker  15K Sep  6 20:38 catalog.jsonl
+-rw-r--r-- 1 runner docker    2 Sep  6 20:38 curated.json
+-rw-r--r-- 1 runner docker  187 Sep  6 20:38 manual_events.csv
+-rw-r--r-- 1 runner docker   95 Sep  6 20:38 run.log
+drwxr-xr-x 2 runner docker 4.0K Sep  6 20:38 sources
