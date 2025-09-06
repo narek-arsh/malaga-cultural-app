@@ -16,11 +16,10 @@ jobs:
   collect:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout (main)
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: main
           persist-credentials: true
 
       - name: Set up Python
@@ -37,14 +36,12 @@ jobs:
         run: |
           python -m scrapers.collector
 
-      - name: Commit via auto-commit action (no more fetch-first)
+      # 👇 Este paso hace el commit y el push. Sin git manual.
+      - name: Auto-commit data changes
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "chore(data): update cultural catalog"
           file_pattern: |
             data/catalog.jsonl
             data/sources/*.json
-          branch: main
-          commit_user_name: github-actions
-          commit_user_email: actions@github.com
           push_options: '--force-with-lease'
