@@ -32,19 +32,32 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run collector (save log)
+      - name: Run collector and write log
         run: |
-          mkdir -p data
-          # ejecuta el colector y guarda el log para auditar qué pasó
-          python -m scrapers.collector | tee data/run.log
+          set -e
+          mkdir -p data data/sources
+          echo "Run started: $(date -u +'%Y-%m-%dT%H:%M:%SZ')" > data/run.log
+          python -m scrapers.collector 2>&1 | tee -a data/run.log || true
+          echo "Run finished: $(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> data/run.log
+          echo "" >> data/run.log
+          echo "=== DATA DIR LISTING ===" >> data/run.log
+          ls -lah data >> data/run.log
 
-      # Commitea SOLO si alguno de los archivos cambió. run.log casi siempre cambia.
+      - name: Show run.log in job output (debug)
+        run: |
+          echo "----- data/run.log -----"
+          cat data/run.log || true
+
+      - name: Upload run.log as artifact (debug)
+        uses: actions/upload-artifact@v4
+        with:
+          name: run-log
+          path: data/run.log
+
+      # ✅ Commitea TODO lo de data/ (incluye run.log) para garantizar un diff
       - name: Auto-commit data changes
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "chore(data): update cultural catalog"
-          file_pattern: |
-            data/catalog.jsonl
-            data/sources/*.json
-            data/run.log
+          file_pattern: data/**
           push_options: '--force-with-lease'
