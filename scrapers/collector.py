@@ -1,26 +1,3 @@
-
-import yaml, json, os
-from datetime import datetime
-from importlib import import_module
-
-OUT_DIR = "data/sources"
-CATALOG = "data/catalog.jsonl"
-
-def load_yaml(path):
-    with open(path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
-
-def write_json(path, data):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-
-def append_jsonl(path, items):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "a", encoding="utf-8") as f:
-        for it in items:
-            f.write(json.dumps(it, ensure_ascii=False) + "\n")
-
 def collect():
     cfg = load_yaml("config/feeds.yaml")
     all_items = []
@@ -37,13 +14,19 @@ def collect():
         if inst["sections"].get("activities") and hasattr(mod, "fetch_activities") and urls.get("activities_list"):
             print(f"[{iid}] activities scraping...")
             inst_items += mod.fetch_activities(urls["activities_list"])
+
+        # write per-source raw
         write_json(os.path.join(OUT_DIR, f"{iid}.json"), inst_items)
         all_items.extend(inst_items)
-    # overwrite catalog
-    with open(CATALOG, "w", encoding="utf-8") as f:
-        for it in all_items:
-            f.write(json.dumps(it, ensure_ascii=False) + "\n")
-    print(f"[OK] catalog -> {len(all_items)} items")
 
-if __name__ == "__main__":
-    collect()
+    # DEDUPE por id (último gana)
+    uniq = {}
+    for it in all_items:
+        uniq[it["id"]] = it
+    deduped = list(uniq.values())
+
+    # overwrite catalog deduplicado
+    with open(CATALOG, "w", encoding="utf-8") as f:
+        for it in deduped:
+            f.write(json.dumps(it, ensure_ascii=False) + "\n")
+    print(f"[OK] catalog -> {len(deduped)} items (dedup from {len(all_items)})")
