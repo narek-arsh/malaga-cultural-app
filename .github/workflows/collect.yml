@@ -1,19 +1,18 @@
-name: Collect Cultural Data
+name: Debug Activities HTML
 
 on:
-  schedule:
-    - cron: '0 4 * * *'   # 06:00 Europe/Madrid
   workflow_dispatch:
+    inputs:
+      only:
+        description: "Institución a inspeccionar (picasso/thyssen/pompidou/all)"
+        required: false
+        default: "picasso"
 
 permissions:
   contents: write
 
-concurrency:
-  group: data-update
-  cancel-in-progress: true
-
 jobs:
-  collect:
+  debug:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -32,26 +31,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run collector
-        env:
-          PYTHONPATH: .
+      - name: Run debug fetch
         run: |
-          mkdir -p data data/sources
-          echo "Run started: $(date -u +'%Y-%m-%dT%H:%M:%SZ')" > data/run.log
-          python -m scrapers.collector || true
-          echo "Run finished: $(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> data/run.log
-          echo "" >> data/run.log
-          echo "=== DATA DIR LISTING ===" >> data/run.log
-          ls -lah data >> data/run.log
+          python scripts/debug_fetch.py --only "${{ github.event.inputs.only }}"
 
-      - name: Show run.log
-        run: |
-          echo "----- data/run.log -----"
-          cat data/run.log || true
-
-      - name: Auto-commit data changes
+      - name: Auto-commit debug artifacts
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "chore(data): update cultural catalog"
-          file_pattern: data/**
+          commit_message: "chore(debug): capture activities HTML (${{ github.event.inputs.only }})"
+          file_pattern: data/debug/**
           push_options: '--force-with-lease'
