@@ -39,20 +39,14 @@ jobs:
 
       - name: Show data diff
         run: |
-          echo "==== git status ===="
-          git status
-          echo "==== tree data ===="
-          ls -lah data || true
-          echo "==== head catalog ===="
-          head -n 20 data/catalog.jsonl || echo "catalog.jsonl missing"
-          echo "==== head picasso ===="
-          head -n 20 data/sources/picasso.json || echo "picasso.json missing"
-          echo "==== head thyssen ===="
-          head -n 20 data/sources/thyssen.json || true
-          echo "==== head pompidou ===="
-          head -n 20 data/sources/pompidou.json || true
+          echo "==== git status ====" && git status
+          echo "==== tree data ====" && ls -lah data || true
+          echo "==== head catalog ====" && (head -n 20 data/catalog.jsonl || echo "catalog.jsonl missing")
+          echo "==== head picasso ====" && (head -n 20 data/sources/picasso.json || echo "picasso.json missing")
+          echo "==== head thyssen ====" && (head -n 20 data/sources/thyssen.json || true)
+          echo "==== head pompidou ====" && (head -n 20 data/sources/pompidou.json || true)
 
-      - name: Save run fingerprint (forces change if everything is identical)
+      - name: Save run fingerprint
         run: |
           python - <<'PY'
 import hashlib, os, time
@@ -61,7 +55,8 @@ def hash_dir(d):
     for root,_,files in os.walk(d):
         for f in sorted(files):
             if f.endswith('.py'):
-                h.update(open(os.path.join(root,f),'rb').read())
+                with open(os.path.join(root,f),'rb') as fh:
+                    h.update(fh.read())
     return h.hexdigest()
 os.makedirs('data', exist_ok=True)
 with open('data/debug_run.txt','w',encoding='utf-8') as f:
@@ -76,7 +71,7 @@ PY
           name: data-after-collector
           path: data/**
 
-      - name: Commit via auto-commit action (no more fetch-first)
+      - name: Auto-commit data
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "chore(data): update cultural catalog"
