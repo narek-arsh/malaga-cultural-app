@@ -32,11 +32,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run collector
+      - name: Run collector (save log)
         run: |
-          python -m scrapers.collector
+          mkdir -p data
+          # ejecuta el colector y guarda el log para auditar qué pasó
+          python -m scrapers.collector | tee data/run.log
 
-      # 👇 Este paso hace el commit y el push. Sin git manual.
+      # Commitea SOLO si alguno de los archivos cambió. run.log casi siempre cambia.
       - name: Auto-commit data changes
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
@@ -44,4 +46,5 @@ jobs:
           file_pattern: |
             data/catalog.jsonl
             data/sources/*.json
+            data/run.log
           push_options: '--force-with-lease'
