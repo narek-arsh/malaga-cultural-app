@@ -32,34 +32,17 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run collector (with full debug)
+      - name: Run collector
         env:
           PYTHONPATH: .
         run: |
-          set -e
           mkdir -p data data/sources
-          {
-            echo "Run started: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-            echo "PWD: $(pwd)"
-            echo "PYTHON: $(python -V)"
-            echo "PYTHONPATH: ${PYTHONPATH}"
-            echo "Repo listing:"
-            ls -lah
-            echo "----- import test -----"
-            python - <<'PY'
-import sys, os, pkgutil
-print("sys.path[0]:", sys.path[0])
-print("cwd:", os.getcwd())
-print("has scrapers pkg?", any(m.name=="scrapers" for m in pkgutil.iter_modules()))
-PY
-            echo "----- collector output -----"
-            python -m scrapers.collector
-            EXIT=$?
-            echo "collector exit code: $EXIT"
-            echo "Run finished: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-            echo "=== DATA DIR LISTING ==="
-            ls -lah data
-          } > data/run.log 2>&1 || true
+          echo "Run started: $(date -u +'%Y-%m-%dT%H:%M:%SZ')" > data/run.log
+          python -m scrapers.collector || true
+          echo "Run finished: $(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> data/run.log
+          echo "" >> data/run.log
+          echo "=== DATA DIR LISTING ===" >> data/run.log
+          ls -lah data >> data/run.log
 
       - name: Show run.log
         run: |
