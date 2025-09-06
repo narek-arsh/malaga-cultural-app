@@ -1,42 +1,5 @@
-timezone: "Europe/Madrid"
-
 institutions:
-  - id: "thyssen"
-    name: "Museo Carmen Thyssen Málaga"
-    active: true
-    sections:
-      expos: true
-      activities: true
-    urls:
-      expos_list: "https://www.carmenthyssenmalaga.org/exposiciones-temporales"
-      activities_list: "https://www.carmenthyssenmalaga.org/actividades"
-    category_map:
-      visita guiada: "actividad"
-      visitas guiadas: "actividad"
-      taller: "actividad"
-      curso: "actividad"
-      conferencias: "charla"
-      conferencia: "charla"
-
-  - id: "pompidou"
-    name: "Centre Pompidou Málaga"
-    active: true
-    sections:
-      expos: true
-      activities: true
-    urls:
-      expos_list: "https://centrepompidou-malaga.eu/exposiciones/"
-      activities_list: "https://centrepompidou-malaga.eu/events/"
-      ical: "https://centrepompidou-malaga.eu/events/?ical=1"
-    category_map:
-      taller: "actividad"
-      talleres: "actividad"
-      club de lecturas: "actividad"
-      música: "concierto"
-      cine: "cine"
-
   - id: "picasso"
-    name: "Museo Picasso Málaga"
     active: true
     sections:
       expos: true
@@ -44,7 +7,21 @@ institutions:
     urls:
       expos_list: "https://www.museopicassomalaga.org/exposiciones"
       activities_list: "https://www.museopicassomalaga.org/actividades"
-    category_map:
-      músicas: "concierto"
-      conferencias: "charla"
-      talleres: "actividad"
+
+  - id: "thyssen"
+    active: true
+    sections:
+      expos: true
+      activities: true
+    urls:
+      expos_list: "https://www.carmenthyssenmalaga.org/exposiciones-temporales"
+      activities_list: "https://www.carmenthyssenmalaga.org/actividades"
+
+  - id: "pompidou"
+    active: true
+    sections:
+      expos: true
+      activities: true
+    urls:
+      expos_list: "https://centrepompidou-malaga.eu/exposiciones/"
+      activities_list: "https://centrepompidou-malaga.eu/events/"
