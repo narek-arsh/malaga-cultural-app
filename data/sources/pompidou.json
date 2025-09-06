@@ -13,10 +13,10 @@
     "lugar": "Centre Pompidou Málaga",
     "imagen_url": "https://centrepompidou-malaga.eu/wp-content/uploads/bfi_thumb/dummy-transparent-r5hwyalz9xy9i6gg7lo9xb5crv4jj5ier3nkc95vy0.png",
     "timezone": "Europe/Madrid",
-    "first_seen": "2025-09-06T10:19:34.446586Z",
-    "last_seen": "2025-09-06T10:19:34.446591Z",
+    "first_seen": "2025-09-06T10:24:55.965587Z",
+    "last_seen": "2025-09-06T10:24:55.965591Z",
     "status": "activo",
-    "parse_confidence": 0.7
+    "parse_confidence": 0.8
   },
   {
     "id": "2525a2fee11b0781",
@@ -32,10 +32,10 @@
     "lugar": "Centre Pompidou Málaga",
     "imagen_url": "https://centrepompidou-malaga.eu/wp-content/uploads/bfi_thumb/dummy-transparent-r5hwyalz9xy9i6gg7lo9xb5crv4jj5ier3nkc95vy0.png",
     "timezone": "Europe/Madrid",
-    "first_seen": "2025-09-06T10:19:34.446795Z",
-    "last_seen": "2025-09-06T10:19:34.446797Z",
+    "first_seen": "2025-09-06T10:24:55.965836Z",
+    "last_seen": "2025-09-06T10:24:55.965837Z",
     "status": "activo",
-    "parse_confidence": 0.7
+    "parse_confidence": 0.8
   },
   {
     "id": "cbdf5e6a0b76348f",
@@ -51,8 +51,8 @@
     "lugar": "Centre Pompidou Málaga",
     "imagen_url": "https://centrepompidou-malaga.eu/wp-content/uploads/2025/07/collage-talleres-verano.jpg",
     "timezone": "Europe/Madrid",
-    "first_seen": "2025-09-06T10:19:35.998858Z",
-    "last_seen": "2025-09-06T10:19:35.998862Z",
+    "first_seen": "2025-09-06T10:24:57.282928Z",
+    "last_seen": "2025-09-06T10:24:57.282933Z",
     "status": "activo",
     "parse_confidence": 0.6
   },
@@ -70,8 +70,8 @@
     "lugar": "Centre Pompidou Málaga",
     "imagen_url": "https://centrepompidou-malaga.eu/wp-content/uploads/2025/06/microlecturas-kandinsky.jpg",
     "timezone": "Europe/Madrid",
-    "first_seen": "2025-09-06T10:19:35.999416Z",
-    "last_seen": "2025-09-06T10:19:35.999418Z",
+    "first_seen": "2025-09-06T10:24:57.283364Z",
+    "last_seen": "2025-09-06T10:24:57.283366Z",
     "status": "activo",
     "parse_confidence": 0.6
   },
@@ -89,8 +89,8 @@
     "lugar": "Centre Pompidou Málaga",
     "imagen_url": "https://centrepompidou-malaga.eu/wp-content/uploads/2025/06/microlecturas-kandinsky-4.jpg",
     "timezone": "Europe/Madrid",
-    "first_seen": "2025-09-06T10:19:35.999927Z",
-    "last_seen": "2025-09-06T10:19:35.999930Z",
+    "first_seen": "2025-09-06T10:24:57.283793Z",
+    "last_seen": "2025-09-06T10:24:57.283795Z",
     "status": "activo",
     "parse_confidence": 0.6
   }
