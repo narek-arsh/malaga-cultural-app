@@ -4,3 +4,5 @@ python-dateutil
 pytz
 streamlit
 pandas
+pip install -r requirements.txt
+python scrapers/collector.py
