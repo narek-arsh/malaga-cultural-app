@@ -1,0 +1,36 @@
+{
+  "fetched_at": "20250906T220428Z",
+  "url": "https://www.museopicassomalaga.org/actividades",
+  "status_code": 200,
+  "encoding": "utf-8",
+  "headers_sample": {
+    "Age": "0",
+    "Cache-Control": "private, no-cache, no-store, max-age=0, must-revalidate",
+    "Content-Encoding": "gzip",
+    "Content-Type": "text/html; charset=utf-8",
+    "Date": "Sat, 06 Sep 2025 22:04:29 GMT",
+    "Etag": "W/\"d8ba-XH57kpZ6V/iXLB89PNtnTOnCRug\"",
+    "Server": "Vercel",
+    "Strict-Transport-Security": "max-age=63072000",
+    "X-Matched-Path": "/es/actividades",
+    "X-Powered-By": "Next.js",
+    "X-Vercel-Cache": "MISS",
+    "X-Vercel-Id": "iad1::iad1::2wrpc-1757196268904-d5aa7641b985",
+    "Transfer-Encoding": "chunked"
+  },
+  "discovered_links_count": 12,
+  "discovered_links": [
+    "https://museopicassomalaga.clorian.com/es/23-profesionales-turismo-cultural",
+    "https://open.spotify.com/user/museo_picasso_malaga",
+    "https://tienda-museo-picasso.myshopify.com/",
+    "https://twitter.com/mPICASSOm",
+    "https://www.fabarte.org/es/",
+    "https://www.facebook.com/museopicassomalaga",
+    "https://www.google.es/maps/place/Museo+Picasso+Málaga/@36.7217406,-4.4206178,17z/data=!3m1!4b1!4m5!3m4!1s0xd72f795542a70b7:0x1c82c7e9854c2bb9!8m2!3d36.7217363!4d-4.4184291?hl=es",
+    "https://www.instagram.com/museopicassomalaga/",
+    "https://www.juntadeandalucia.es/organismos/culturaypatrimoniohistorico.html",
+    "https://www.masmuseopicasso.org/",
+    "https://www.pinterest.es/museopicassomlg/_created/",
+    "https://www.youtube.com/museopicassomalaga"
+  ]
+}
