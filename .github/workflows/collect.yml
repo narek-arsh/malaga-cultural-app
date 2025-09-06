@@ -32,29 +32,21 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run collector and write log
+      - name: Run collector
         run: |
-          set -e
           mkdir -p data data/sources
           echo "Run started: $(date -u +'%Y-%m-%dT%H:%M:%SZ')" > data/run.log
-          python -m scrapers.collector 2>&1 | tee -a data/run.log || true
+          python -m scrapers.collector || true
           echo "Run finished: $(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> data/run.log
           echo "" >> data/run.log
           echo "=== DATA DIR LISTING ===" >> data/run.log
           ls -lah data >> data/run.log
 
-      - name: Show run.log in job output (debug)
+      - name: Show run.log
         run: |
           echo "----- data/run.log -----"
           cat data/run.log || true
 
-      - name: Upload run.log as artifact (debug)
-        uses: actions/upload-artifact@v4
-        with:
-          name: run-log
-          path: data/run.log
-
-      # ✅ Commitea TODO lo de data/ (incluye run.log) para garantizar un diff
       - name: Auto-commit data changes
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
