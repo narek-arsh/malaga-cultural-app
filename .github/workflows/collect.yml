@@ -37,6 +37,45 @@ jobs:
         run: |
           python -m scrapers.collector
 
+      - name: Show data diff
+        run: |
+          echo "==== git status ===="
+          git status
+          echo "==== tree data ===="
+          ls -lah data || true
+          echo "==== head catalog ===="
+          head -n 20 data/catalog.jsonl || echo "catalog.jsonl missing"
+          echo "==== head picasso ===="
+          head -n 20 data/sources/picasso.json || echo "picasso.json missing"
+          echo "==== head thyssen ===="
+          head -n 20 data/sources/thyssen.json || true
+          echo "==== head pompidou ===="
+          head -n 20 data/sources/pompidou.json || true
+
+      - name: Save run fingerprint (forces change if everything is identical)
+        run: |
+          python - <<'PY'
+import hashlib, os, time
+def hash_dir(d):
+    h=hashlib.sha1()
+    for root,_,files in os.walk(d):
+        for f in sorted(files):
+            if f.endswith('.py'):
+                h.update(open(os.path.join(root,f),'rb').read())
+    return h.hexdigest()
+os.makedirs('data', exist_ok=True)
+with open('data/debug_run.txt','w',encoding='utf-8') as f:
+    f.write(time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())+'\n')
+    f.write('scrapers_hash='+hash_dir('scrapers')+'\n')
+PY
+          cat data/debug_run.txt
+
+      - name: Upload data as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: data-after-collector
+          path: data/**
+
       - name: Commit via auto-commit action (no more fetch-first)
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
@@ -44,6 +83,7 @@ jobs:
           file_pattern: |
             data/catalog.jsonl
             data/sources/*.json
+            data/debug_run.txt
           branch: main
           commit_user_name: github-actions
           commit_user_email: actions@github.com
