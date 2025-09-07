@@ -1,7 +1,5 @@
 requests
 beautifulsoup4
-python-dateutil
-pytz
-streamlit
-pandas
+lxml
 PyYAML
+python-dateutil
