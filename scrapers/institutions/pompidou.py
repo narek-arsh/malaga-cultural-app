@@ -1,84 +1,85 @@
-# scrapers/institutions/pompidou.py
-import re
+# -*- coding: utf-8 -*-
+from __future__ import annotations
+
+from typing import Any, Dict, List
 from bs4 import BeautifulSoup
-from ..utils import parse_spanish_date_text, fetch_html
-from ..base import make_id, now_iso
+
+from ..utils import fetch_html, clean_text
 
 SOURCE_ID = "pompidou"
 BASE = "https://centrepompidou-malaga.eu"
+TZ = "Europe/Madrid"
+PLACE = "Centre Pompidou Málaga"
 
-def _abs(url): return url if url.startswith("http") else (BASE + url)
+def _item_proto() -> Dict[str, Any]:
+    return {
+        "id": None,
+        "source_id": SOURCE_ID,
+        "source_url": None,
+        "categoria": None,
+        "titulo": "",
+        "descripcion": "",
+        "fecha_inicio": None,
+        "fecha_fin": None,
+        "ocurrencias": [],
+        "all_day": True,
+        "lugar": PLACE,
+        "imagen_url": None,
+        "timezone": TZ,
+        "status": "activo",
+        "parse_confidence": 0.7,
+    }
 
-def fetch_expos(url):
-    html = fetch_html(url)
-    soup = BeautifulSoup(html, "html.parser")
-    items = []
-    for card in soup.select("article, .elementor-post"):
-        title_el = card.select_one(".elementor-post__title, h2, h3")
-        if not title_el:
-            continue
-        title = title_el.get_text(" ", strip=True)
-        txt = card.get_text(" ", strip=True)
-        # busca 'dd/mm/yyyy – dd/mm/yyyy' o 'dd/mm/yyyy — mm/yyyy'
-        m = re.search(r"\d{1,2}/\d{1,2}/\d{4}\s*[-—]\s*(\d{1,2}/\d{1,2}/\d{4}|[01]?\d/\d{4})", txt)
-        date_text = m.group(0) if m else txt
-        start, end, occ, allday = parse_spanish_date_text(date_text)
-        a = card.select_one("a[href]")
-        link = _abs(a["href"]) if a else url
-        img_el = card.select_one("img[src], img[data-src]")
-        img = (img_el.get("src") or img_el.get("data-src")) if img_el else None
-        item = {
-            "id":"", "source_id": SOURCE_ID, "source_url": link,
-            "categoria":"exposicion","titulo":title,"descripcion":"",
-            "fecha_inicio": start.isoformat() if start else None,
-            "fecha_fin": end.isoformat() if end else None,
-            "ocurrencias": [], "all_day": True,
-            "lugar":"Centre Pompidou Málaga","imagen_url": img,
-            "timezone":"Europe/Madrid","first_seen": now_iso(),"last_seen": now_iso(),
-            "status":"activo","parse_confidence": 0.8 if start and end else 0.6
-        }
-        item["id"] = make_id(item)
-        items.append(item)
+def _mk_id(url: str) -> str:
+    import hashlib
+    return hashlib.md5(url.encode("utf-8")).hexdigest()[:16]
+
+def _collect_list(list_url: str, cat: str) -> List[Dict[str, Any]]:
+    html = fetch_html(list_url)
+    soup = BeautifulSoup(html, "lxml")
+    links = []
+    for a in soup.select("a[href]"):
+        href = a.get("href", "")
+        if cat == "exposicion" and "/exposicion/" in href:
+            links.append(href)
+        if cat == "actividad" and "/event/" in href:
+            links.append(href)
+    # absolutiza y dedupe
+    full = []
+    for href in links:
+        if href.startswith("http"):
+            full.append(href)
+        else:
+            full.append(BASE + ("" if href.startswith("/") else "/") + href)
+    full = sorted(set(full))
+
+    items: List[Dict[str, Any]] = []
+    for url in full:
+        dh = fetch_html(url)
+        dsoup = BeautifulSoup(dh, "lxml")
+        title = clean_text(dsoup.find("h1").get_text()) if dsoup.find("h1") else ""
+        img = None
+        og = dsoup.find("meta", attrs={"property": "og:image"})
+        if og:
+            img = og.get("content")
+
+        it = _item_proto()
+        it.update({
+            "id": _mk_id(url),
+            "source_url": url,
+            "categoria": "exposicion" if "/exposicion/" in url else "actividad",
+            "titulo": title,
+            "imagen_url": img,
+        })
+        items.append(it)
     return items
 
-def fetch_activities(url):
-    html = fetch_html(url)
-    soup = BeautifulSoup(html, "html.parser")
-    items = []
-    for card in soup.select(".tribe-events-calendar-list__event, article.type-tribe_events, article"):
-        title_el = card.select_one(".tribe-events-calendar-list__event-title, h2, h3")
-        if not title_el:
-            continue
-        title = title_el.get_text(" ", strip=True)
-        # los bloques datetime suelen estar en estas clases
-        date_text = ""
-        for sel in [
-            ".tribe-events-calendar-list__event-datetime",
-            ".tribe-event-date-start", ".tribe-event-date-end",
-            ".tribe-events-content", "time"
-        ]:
-            el = card.select_one(sel)
-            if el:
-                t = el.get_text(" ", strip=True)
-                if re.search(r"\d|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre|/|am|pm|-", t, re.I):
-                    date_text = t; break
-        if not date_text:
-            date_text = card.get_text(" ", strip=True)
-        start, end, occ, allday = parse_spanish_date_text(date_text)
-        a = card.select_one("a[href]")
-        link = _abs(a["href"]) if a else url
-        img_el = card.select_one("img[src], img[data-src]")
-        img = (img_el.get("src") or img_el.get("data-src")) if img_el else None
-        item = {
-            "id":"", "source_id": SOURCE_ID, "source_url": link,
-            "categoria":"actividad","titulo":title,"descripcion":"",
-            "fecha_inicio": start.isoformat() if start else None,
-            "fecha_fin": end.isoformat() if end else None,
-            "ocurrencias": [d.isoformat() for d in occ] if occ else [],
-            "all_day": True, "lugar":"Centre Pompidou Málaga","imagen_url": img,
-            "timezone":"Europe/Madrid","first_seen": now_iso(),"last_seen": now_iso(),
-            "status":"activo","parse_confidence": 0.75 if start else 0.6
-        }
-        item["id"] = make_id(item)
-        items.append(item)
-    return items
+def collect(cfg: Dict[str, Any]) -> List[Dict[str, Any]]:
+    sections = (cfg.get("sections") or {})
+    urls = (cfg.get("urls") or {})
+    out: List[Dict[str, Any]] = []
+    if sections.get("expos"):
+        out.extend(_collect_list(urls.get("expos_list"), "exposicion"))
+    if sections.get("activities"):
+        out.extend(_collect_list(urls.get("activities_list"), "actividad"))
+    return out
