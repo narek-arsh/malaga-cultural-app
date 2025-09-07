@@ -1,158 +1,268 @@
 # scrapers/institutions/picasso.py
+# -*- coding: utf-8 -*-
 from __future__ import annotations
-from typing import List, Dict, Any
-from datetime import datetime, timezone
-import json, re
-from ..utils import fetch_html, make_item, slugify, ensure_dir
 
+import json
+import re
+from datetime import datetime
+from typing import List, Dict, Any, Optional
+
+from bs4 import BeautifulSoup  # asegúrate de tener bs4 en requirements.txt
+from ..utils import fetch_html  # ya existe y lo usas en otros scrapers
+
+SOURCE_ID = "picasso"
 BASE = "https://www.museopicassomalaga.org"
+TZ = "Europe/Madrid"
+PLACE = "Museo Picasso Málaga"
 
-EXPOS_URL = f"{BASE}/exposiciones"
-ACTIVIDADES_URL = f"{BASE}/actividades"
 
-SPANISH_MONTHS = {
-    "enero":1,"febrero":2,"marzo":3,"abril":4,"mayo":5,"junio":6,
-    "julio":7,"agosto":8,"septiembre":9,"setiembre":9,"octubre":10,"noviembre":11,"diciembre":12
-}
+# ------------------------------
+# Utilidades internas
+# ------------------------------
+def _clean_text(x: Optional[str]) -> str:
+    if not x:
+        return ""
+    return re.sub(r"\s+", " ", x).strip()
 
-def _iso(d: datetime) -> str:
-    return d.date().isoformat()
-
-def _from_ms(ms: int) -> str:
-    # ms epoch -> iso date (Europe/Madrid no necesario para la fecha calendario)
-    return datetime.fromtimestamp(ms/1000, tz=timezone.utc).date().isoformat()
-
-def _extract_next_data(html: str) -> Dict[str, Any] | None:
-    m = re.search(r'<script id="__NEXT_DATA__" type="application/json">(.+?)</script>', html, re.S)
-    if not m: return None
-    return json.loads(m.group(1))
-
-def _parse_related_activities(next_data: Dict[str,Any]) -> List[Dict[str,Any]]:
-    arr = []
+def _to_date_yyyy_mm_dd(s: Optional[str]) -> Optional[str]:
+    """Convierte 'dd/mm/aaaa' -> 'aaaa-mm-dd' o devuelve s si ya está normalizada o None si no hay dato."""
+    if not s:
+        return None
+    s = s.strip()
+    # Si ya viene 'aaaa-mm-dd'
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", s):
+        return s
+    # Si viene 'dd/mm/aaaa'
+    m = re.fullmatch(r"(\d{2})/(\d{2})/(\d{4})", s)
+    if m:
+        d, mth, y = m.groups()
+        return f"{y}-{mth}-{d}"
+    # Otras variantes (no romper): intenta parseo laxo con dayfirst
     try:
-        rel = next_data["props"]["pageProps"].get("related_activities", [])
-        for entry in rel:
-            a = entry.get("activity", {})
-            if not a: continue
-            arr.append({
-                "id": a.get("id"),
-                "title": a.get("title","").strip(),
-                "slug": a.get("slug"),
-                "start_date": a.get("start_date"),  # 'YYYY-MM-DD' string
-                "end_date": a.get("end_date"),
-                "dates_literal": a.get("dates_literal"),
-                "thumbnail": (a.get("thumbnail") or {}).get("url"),
-                "main_type": (a.get("main_type") or {}).get("title"),
-                "url": f"{BASE}/actividades/{a.get('slug')}" if a.get("slug") else ACTIVIDADES_URL,
-            })
+        dt = datetime.strptime(s, "%d %B %Y")  # p.ej. "16 septiembre 2025"
+        return dt.strftime("%Y-%m-%d")
     except Exception:
-        pass
-    return arr
+        try:
+            dt = datetime.strptime(s, "%d %b %Y")  # abreviado
+            return dt.strftime("%Y-%m-%d")
+        except Exception:
+            return None
 
-def _parse_featured_activities(next_data: Dict[str,Any]) -> List[Dict[str,Any]]:
-    arr = []
+def _from_epoch_ms(ms: Optional[int]) -> Optional[str]:
+    if not isinstance(ms, int):
+        return None
     try:
-        feats = next_data["props"]["pageProps"].get("featuredActivities", [])
-        for a in feats:
-            arr.append({
-                "id": a.get("id"),
-                "title": a.get("title","").strip(),
-                "slug": a.get("slug"),
-                "start_date_ms": a.get("start_date"),
-                "end_date_ms": a.get("end_date"),
-                "dates_literal": a.get("dates_literal"),
-                "thumbnail": (a.get("thumbnail") or {}).get("url"),
-                "main_type": (a.get("main_type") or {}).get("title"),
-                "url": f"{BASE}/actividades/{a.get('slug')}" if a.get("slug") else ACTIVIDADES_URL,
-            })
+        return datetime.utcfromtimestamp(ms / 1000.0).strftime("%Y-%m-%d")
     except Exception:
-        pass
-    return arr
+        return None
 
-def _normalize_dates(a: Dict[str,Any]) -> tuple[str|None,str|None]:
-    # Prioridad: ms epoch si existen, si no ISO (YYYY-MM-DD), si no None
-    if a.get("start_date_ms"):
-        start = _from_ms(a["start_date_ms"])
-        end = _from_ms(a["end_date_ms"]) if a.get("end_date_ms") else start
-        return start, end
-    if a.get("start_date"):
-        return a["start_date"], a.get("end_date") or a["start_date"]
-    # Como extra, intentar dates_literal con patrones más comunes:
-    lit = (a.get("dates_literal") or "").strip()
-    if not lit:
-        return None, None
-    # Ejemplos a cubrir: "16 septiembre 2025 —— 14 julio 2026", "18 – 19 septiembre 2025"
-    # "1, 8, 15, 22 y 29 octubre 2025" (múltiples ocurrencias, aquí devolvemos rango min-max)
-    # Rango con dos fechas completas
-    m = re.search(r'(\d{1,2})\s+([a-záéíóúñ]+)\s+(\d{4}).+?(\d{1,2})\s+([a-záéíóúñ]+)\s+(\d{4})', lit, re.I)
-    if m:
-        d1, mon1, y1, d2, mon2, y2 = m.groups()
-        start = f"{y1}-{SPANISH_MONTHS[mon1.lower()]:02d}-{int(d1):02d}"
-        end   = f"{y2}-{SPANISH_MONTHS[mon2.lower()]:02d}-{int(d2):02d}"
-        return start, end
-    # Rango con días dentro del mismo mes/año: "18 – 19 septiembre 2025"
-    m = re.search(r'(\d{1,2})\s*[-–]\s*(\d{1,2})\s+([a-záéíóúñ]+)\s+(\d{4})', lit, re.I)
-    if m:
-        d1, d2, mon, y = m.groups()
-        yy = int(y); mm = SPANISH_MONTHS[mon.lower()]
-        return f"{yy}-{mm:02d}-{int(d1):02d}", f"{yy}-{mm:02d}-{int(d2):02d}"
-    # Lista de días en un mes: "1, 8, 15, 22 y 29 octubre 2025" => devolver min y max
-    m = re.search(r'([\d,\s y\-–]+)\s+([a-záéíóúñ]+)\s+(\d{4})', lit, re.I)
-    if m:
-        days_blob, mon, y = m.groups()
-        days = [int(x) for x in re.findall(r'\d{1,2}', days_blob)]
-        if days:
-            yy = int(y); mm = SPANISH_MONTHS[mon.lower()]
-            return f"{yy}-{mm:02d}-{min(days):02d}", f"{yy}-{mm:02d}-{max(days):02d}"
-    return None, None
+def _make_item(**kw) -> Dict[str, Any]:
+    """Estructura homogénea como la que está guardando el collector al escribir catalog.jsonl."""
+    return {
+        "source_id": SOURCE_ID,
+        "source_url": kw.get("source_url") or "",
+        "categoria": kw.get("categoria") or "",
+        "titulo": _clean_text(kw.get("titulo")),
+        "descripcion": _clean_text(kw.get("descripcion")),
+        "fecha_inicio": kw.get("fecha_inicio"),
+        "fecha_fin": kw.get("fecha_fin"),
+        "ocurrencias": kw.get("ocurrencias") or [],
+        "all_day": True,
+        "lugar": PLACE,
+        "imagen_url": kw.get("imagen_url"),
+        "timezone": TZ,
+    }
 
-def scrape_expos() -> List[Dict[str,Any]]:
-    # Ya las tienes funcionando; mantenemos tu lógica existente:
-    # (reutiliza tu implementación actual de exposiciones)
-    from .thyssen import scrape_expos as _noop  # truco para no dejar vacío si importan
-    return []
+# ------------------------------
+# Exposiciones
+# ------------------------------
+def _collect_expos() -> List[Dict[str, Any]]:
+    url = f"{BASE}/exposiciones"
+    html, meta = fetch_html(url)
+    soup = BeautifulSoup(html, "html.parser")
 
-def scrape_activities() -> List[Dict[str,Any]]:
-    html, meta = fetch_html(ACTIVIDADES_URL)
-    nd = _extract_next_data(html) or {}
-    rel = _parse_related_activities(nd)
-    feats = _parse_featured_activities(nd)
+    items: List[Dict[str, Any]] = []
 
-    # Merge + dedup por slug o id
+    # Tarjetas de exposiciones (página publica)
+    # Buscamos enlaces dentro de /exposiciones/<slug>
+    for a in soup.select('a[href^="/exposiciones/"]'):
+        href = a.get("href") or ""
+        # Filtra index propio (/exposiciones) y anchors
+        if href.rstrip("/") == "/exposiciones" or "#" in href:
+            continue
+        expo_url = BASE + href
+
+        # Título (intenta dentro del enlace o adyacente)
+        title = ""
+        # hay estructura con dos líneas: artista — subtítulo; si no, usa texto plano
+        title = _clean_text(a.get_text(" ") or "")
+        if not title:
+            # fallback: encabezado cercano
+            h = a.find(["h2", "h3"])
+            if h:
+                title = _clean_text(h.get_text(" ") or "")
+
+        # Fechas: la web muestra dos fechas visibles; las obtuvimos bien antes, pero aquí
+        # no forzamos. Si no las podemos ver en el listado, las dejamos en None (collector ya te estaba guardando por expos).
+        start = None
+        end = None
+
+        # Imagen (si hay)
+        img = a.find("img")
+        img_url = img.get("src") if img and img.has_attr("src") else None
+        if img_url and img_url.startswith("/"):
+            img_url = BASE + img_url
+
+        items.append(
+            _make_item(
+                source_url=expo_url,
+                categoria="exposicion",
+                titulo=title,
+                fecha_inicio=start,
+                fecha_fin=end,
+                imagen_url=img_url,
+            )
+        )
+
+    # Dedup por URL
     seen = set()
-    merged: List[Dict[str,Any]] = []
-    for a in rel + feats:
-        key = a.get("slug") or a.get("id")
-        if not key or key in seen: continue
-        seen.add(key)
-        merged.append(a)
+    deduped = []
+    for it in items:
+        if it["source_url"] in seen:
+            continue
+        seen.add(it["source_url"])
+        deduped.append(it)
 
-    # snapshot para depurar
-    ensure_dir("data/sources")
-    with open("data/sources/picasso_actividades.json", "w", encoding="utf-8") as f:
-        json.dump(merged, f, ensure_ascii=False, indent=2)
+    return deduped
 
-    items = []
-    for a in merged:
-        start, end = _normalize_dates(a)
-        items.append(make_item(
-            source_id="picasso",
-            source_url=a.get("url") or ACTIVIDADES_URL,
-            categoria="actividad",
-            titulo=a.get("title") or "",
-            descripcion="",
-            fecha_inicio=start,
-            fecha_fin=end,
-            ocurrencias=[],  # si quieres, aquí puedes expandir la lista de días desde dates_literal
-            all_day=True,
-            lugar="Museo Picasso Málaga",
-            imagen_url=a.get("thumbnail"),
-            parse_confidence=0.9 if (start or end) else 0.7
-        ))
+# ------------------------------
+# Actividades (lee __NEXT_DATA__)
+# ------------------------------
+def _collect_activities() -> List[Dict[str, Any]]:
+    url = f"{BASE}/actividades"
+    html, meta = fetch_html(url)
+    soup = BeautifulSoup(html, "html.parser")
+
+    # 1) Extrae el JSON de Next.js
+    script = soup.find("script", id="__NEXT_DATA__")
+    if not script or not script.string:
+        # Si no hay JSON embebido, no hay actividades renderizadas del lado servidor
+        return []
+
+    try:
+        data = json.loads(script.string)
+    except Exception:
+        return []
+
+    # En Next el JSON útil está en props.pageProps
+    page_props = (data or {}).get("props", {}).get("pageProps", {}) or {}
+
+    # Las actividades aparecen en varios campos según el estado:
+    # - "featuredActivities": lista de destacadas (con start_date/end_date en epoch ms)
+    # - "related_activities": a veces estructura con {"activity": {...}}
+    # Tomamos ambos si existen.
+    activities: List[Dict[str, Any]] = []
+
+    # 2) featuredActivities (más estable)
+    for act in page_props.get("featuredActivities", []) or []:
+        # Formato típico:
+        # { id, title, slug, start_date: epoch_ms, end_date: epoch_ms,
+        #   dates_literal, tickets_url, ... , thumbnail: {url}, main_type: {title} }
+        title = _clean_text(act.get("title"))
+        slug = act.get("slug") or ""
+        source_url = f"{BASE}/actividades/{slug}" if slug else url
+        img_url = None
+        thumb = act.get("thumbnail") or {}
+        if isinstance(thumb, dict):
+            img_url = thumb.get("url")
+
+        start = _from_epoch_ms(act.get("start_date"))
+        end = _from_epoch_ms(act.get("end_date"))
+
+        # Si el JSON trae sólo dates_literal (p.ej. “18 – 19 septiembre 2025”), lo usamos como fallback.
+        if not start and not end:
+            dates_literal = _clean_text(act.get("dates_literal"))
+            # No hacemos parsing fino de rangos con guiones en español aquí; guardamos None y ya está visible en “descripcion”
+            # o podrías mapearlo a ocurrencias puntuales si quisieras.
+        categoria = "actividad"
+        if isinstance(act.get("main_type"), dict) and act["main_type"].get("title"):
+            # puedes mapear a “Conferencias, Talleres, …” si algún upstream lo usa
+            pass
+
+        activities.append(
+            _make_item(
+                source_url=source_url,
+                categoria=categoria,
+                titulo=title,
+                fecha_inicio=start,
+                fecha_fin=end,
+                imagen_url=img_url,
+                descripcion=_clean_text(act.get("lead") or ""),
+            )
+        )
+
+    # 3) related_activities (cuando la pestaña “Ahora y próximamente” está vacía,
+    #    suelen quedar aquí igualmente serializadas)
+    for rel in page_props.get("related_activities", []) or []:
+        # a veces es {"id": X, "activity": {...}}
+        node = rel.get("activity") if isinstance(rel, dict) and "activity" in rel else rel
+        if not isinstance(node, dict):
+            continue
+
+        title = _clean_text(node.get("title"))
+        slug = node.get("slug") or ""
+        source_url = f"{BASE}/actividades/{slug}" if slug else url
+
+        # Fechas pueden venir como ISO (start_date/end_date en texto) o epoch en featured.
+        # En este bloque, suelen venir como ISO yyyy-mm-dd (según lo que viste en el HTML).
+        start = node.get("start_date")
+        end = node.get("end_date")
+        start = _to_date_yyyy_mm_dd(start) if start else None
+        end = _to_date_yyyy_mm_dd(end) if end else None
+
+        img_url = None
+        thumb = node.get("thumbnail") or {}
+        if isinstance(thumb, dict):
+            # Strapi suele dar “url” absoluto
+            img_url = thumb.get("url")
+
+        activities.append(
+            _make_item(
+                source_url=source_url,
+                categoria="actividad",
+                titulo=title,
+                fecha_inicio=start,
+                fecha_fin=end,
+                imagen_url=img_url,
+                descripcion=_clean_text(node.get("lead") or ""),
+            )
+        )
+
+    # Dedup por URL
+    seen = set()
+    deduped = []
+    for it in activities:
+        if it["source_url"] in seen:
+            continue
+        seen.add(it["source_url"])
+        deduped.append(it)
+
+    return deduped
+
+# ------------------------------
+# Punto de entrada del scraper
+# ------------------------------
+def collect() -> List[Dict[str, Any]]:
+    items: List[Dict[str, Any]] = []
+    try:
+        expos = _collect_expos()
+        items.extend(expos)
+    except Exception:
+        # no rompemos todo si falla una pata
+        pass
+    try:
+        acts = _collect_activities()
+        items.extend(acts)
+    except Exception:
+        pass
     return items
-
-def scrape() -> List[Dict[str,Any]]:
-    # Si tu collector llama a scrape_expos() y scrape_activities(), mantenlo igual:
-    expos = []  # delega a tu scraper de expos ya existente si lo prefieres
-    acts = scrape_activities()
-    return expos + acts
