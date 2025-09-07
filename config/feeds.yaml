@@ -25,3 +25,11 @@ institutions:
     urls:
       expos_list: "https://centrepompidou-malaga.eu/exposiciones/"
       activities_list: "https://centrepompidou-malaga.eu/events/"
+
+  - id: "latermica"
+    active: true
+    sections:
+      activities: true
+    urls:
+      activities_list: "https://www.latermicamalaga.com/agenda/"
+   
