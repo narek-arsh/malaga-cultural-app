@@ -2,15 +2,21 @@ name: Collect cultural data
 
 on:
   schedule:
-    - cron: '0 4 * * *'   # 06:00 Europe/Madrid aprox
+    - cron: '0 4 * * *'   # ~06:00 Europe/Madrid
   workflow_dispatch:
     inputs:
       log_level:
-        description: "LOG_LEVEL for collector (DEBUG/INFO/WARNING)"
+        description: "LOG_LEVEL for collector (DEBUG/INFO/WARNING/ERROR)"
         required: false
         default: "INFO"
         type: choice
         options: [DEBUG, INFO, WARNING, ERROR]
+      debug_pages:
+        description: "Fetch & save Picasso activities HTML/JSON (true/false)"
+        required: false
+        default: "false"
+        type: choice
+        options: ["false", "true"]
 
 permissions:
   contents: write
@@ -53,45 +59,20 @@ jobs:
           git config user.email "github-actions@users.noreply.github.com"
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
-      # ✅ Nuevo: asegura árbol limpio antes de rebase/pull
-      - name: Ensure clean working tree (stash or reset)
-        run: |
-          # Si hay cambios en ficheros versionados (p.ej., un run.log antiguo), los guardamos temporalmente
-          if ! git diff --quiet || ! git diff --cached --quiet; then
-            echo "Working tree not clean. Stashing..."
-            git stash push -u -m "pre-pull stash" || true
-          fi
-
       - name: Pull (rebase) latest main BEFORE running collector
         run: |
           git fetch origin main
           git checkout main
-          git pull --rebase origin main
-
-      # 🧪 Opcional: snapshot HTML/headers de Actividades (Picasso) para depurar parsers
-      - name: Snapshot Picasso actividades (debug)
-        run: |
-          mkdir -p data/sources
-          URL="https://www.museopicassomalaga.org/actividades"
-          TS=$(date -u +%Y%m%dT%H%M%SZ)
-          STATUS=$(curl -s -o /tmp/picasso_acts.html -D /tmp/picasso_acts.headers -w "%{http_code}" "$URL" || true)
-
-          # Guardamos el HTML crudo (útil para ver cambios de estructura)
-          cp /tmp/picasso_acts.html "data/sources/picasso_actividades.html" || true
-
-          # Generamos un JSON sencillo con metadatos
-          {
-            echo "{"
-            echo "  \"fetched_at\": \"${TS}\","
-            echo "  \"url\": \"${URL}\","
-            echo "  \"status_code\": ${STATUS},"
-            echo "  \"encoding\": \"utf-8\""
-            echo "}"
-          } > "data/sources/picasso_actividades.json"
+          # Si hay cambios locales sin stage (p.ej. un run previo), no rebaseamos para no fallar
+          if ! git diff --quiet || ! git diff --cached --quiet; then
+            echo "Working tree has changes; will not rebase to avoid conflicts."
+          else
+            git pull --rebase origin main
+          fi
 
       - name: Run collector
         env:
-          LOG_LEVEL: ${{ inputs.log_level && inputs.log_level || 'INFO' }}
+          LOG_LEVEL: ${{ inputs.log_level || 'INFO' }}
         run: |
           mkdir -p data
           echo "Run started: $(date -u +%Y-%m-%dT%H:%M:%SZ)" > data/run.log
@@ -101,6 +82,53 @@ jobs:
           echo "=== DATA DIR LISTING ===" >> data/run.log
           ls -lah data >> data/run.log
 
+      - name: (Optional debug) Fetch Picasso activities page
+        if: ${{ github.event.inputs.debug_pages == 'true' }}
+        run: |
+          set -e
+          mkdir -p data/sources
+          URL="https://www.museopicassomalaga.org/actividades"
+          TS=$(date -u +%Y%m%dT%H%M%SZ)
+          HTML="data/sources/picasso_actividades.html"
+          HDRS="data/sources/picasso_actividades.headers.txt"
+          JSON="data/sources/picasso_actividades.json"
+
+          # Descargar HTML + cabeceras
+          curl -sS -L -D "$HDRS" -o "$HTML" "$URL"
+
+          # Componer un JSON sencillo con metadatos útiles
+          python - << 'PY'
+import json, os, datetime
+url = "https://www.museopicassomalaga.org/actividades"
+hdrs_path = "data/sources/picasso_actividades.headers.txt"
+out_path = "data/sources/picasso_actividades.json"
+fetched_at = datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+status = None
+headers = {}
+if os.path.exists(hdrs_path):
+    with open(hdrs_path, "r", encoding="utf-8", errors="ignore") as f:
+        # Primera línea suele ser "HTTP/2 200" o similar
+        first = f.readline().strip()
+        if first.startswith("HTTP/"):
+            parts = first.split()
+            if len(parts) >= 2 and parts[1].isdigit():
+                status = int(parts[1])
+        for line in f:
+            line = line.strip()
+            if not line or ":" not in line: 
+                continue
+            k, v = line.split(":", 1)
+            headers[k.strip()] = v.strip()
+data = {
+    "fetched_at": fetched_at,
+    "url": url,
+    "status_code": status,
+    "headers_sample": headers
+}
+with open(out_path, "w", encoding="utf-8") as f:
+    json.dump(data, f, ensure_ascii=False, indent=2)
+PY
+
       - name: Upload run.log artifact
         uses: actions/upload-artifact@v4
         with:
@@ -108,17 +136,18 @@ jobs:
           path: data/run.log
           retention-days: 7
 
-      # ⬇️ Ajustado: forzamos también data/sources/*
-            - name: Commit changes (if any)
+      - name: Commit changes (if any)
         run: |
-          # Asegura que el directorio existe (por si el scraper aún no crea sources)
+          # Asegura directorio de fuentes
           mkdir -p data/sources
 
-          # Stage de los archivos de datos (nunca añadimos run.log)
+          # Stage de los archivos de datos (jamás añadimos run.log)
           git add -f data/catalog.jsonl data/curated.json data/manual_events.csv || true
 
-          # Si no hay .json en sources, que no falle:
+          # Stage de fuentes si existen
           git add -f data/sources/*.json 2>/dev/null || true
+          git add -f data/sources/*.html 2>/dev/null || true
+          git add -f data/sources/*.headers.txt 2>/dev/null || true
 
           # ¿Hay algo staged?
           if git diff --cached --quiet; then
@@ -128,3 +157,15 @@ jobs:
 
           ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           git commit -m "chore(data): update cultural catalog ${ts}"
+
+      - name: Push (with auto-rebase retry)
+        run: |
+          set -e
+          if git push origin main; then
+            echo "Pushed OK"
+          else
+            echo "Push failed, rebasing..."
+            # Si el tree cambió durante el job, intentamos rebase y reintento
+            git pull --rebase origin main
+            git push origin main
+          fi
