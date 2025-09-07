@@ -47,10 +47,23 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Pull (rebase) latest main BEFORE running collector
+        run: |
+          git fetch origin main
+          git checkout main
+          git pull --rebase origin main
+
       - name: Run collector
         env:
           LOG_LEVEL: ${{ inputs.log_level || 'INFO' }}
         run: |
+          mkdir -p data
           echo "Run started: $(date -u +%Y-%m-%dT%H:%M:%SZ)" > data/run.log
           python -m scrapers.collector >> data/run.log 2>&1 || true
           echo "Run finished: $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> data/run.log
@@ -65,21 +78,11 @@ jobs:
           path: data/run.log
           retention-days: 7
 
-      - name: Configure Git
-        run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@users.noreply.github.com"
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-
-      - name: Pull (rebase) latest main
-        run: |
-          git fetch origin main
-          git checkout main
-          git pull --rebase origin main
-
+      # Importante: no añadimos run.log al commit
       - name: Commit changes (if any)
         run: |
-          git add -A data
+          # Ajusta la lista a lo que quieras versionar
+          git add -f data/catalog.jsonl data/curated.json data/manual_events.csv || true
           if git diff --cached --quiet; then
             echo "No changes to commit."
             exit 0
@@ -87,7 +90,14 @@ jobs:
           ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           git commit -m "chore(data): update cultural catalog ${ts}"
 
-      - name: Push
-        if: success()  # will be skipped if no commit
+      - name: Push (with auto-rebase retry)
+        if: success()
         run: |
-          git push origin main
+          set -e
+          if git push origin main; then
+            echo "Pushed OK"
+          else
+            echo "Push failed, rebasing..."
+            git pull --rebase origin main
+            git push origin main
+          fi
