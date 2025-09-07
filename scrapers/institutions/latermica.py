@@ -1,65 +1,32 @@
 import re
-from datetime import datetime
 from bs4 import BeautifulSoup
 from scrapers.utils import fetch_html, parse_spanish_date_text
 
-BASE_URL = "https://www.latermicamalaga.com/agenda/"
-
-def collect():
-    html = fetch_html(BASE_URL)
+def collect(cfg) -> list[dict]:
+    """
+    Scraper para la agenda de La Térmica (https://www.latermicamalaga.com/agenda/)
+    """
+    url = cfg["urls"]["activities_list"]
+    html = fetch_html(url)
     soup = BeautifulSoup(html, "html.parser")
 
-    events = []
+    items = []
+    for card in soup.select("article.ajde_events"):  # estructura típica de su agenda
+        title_el = card.select_one(".event_title a")
+        date_el = card.select_one(".dates")
+        link_el = title_el["href"] if title_el else None
 
-    cards = soup.select("div.event-card")  # Ajustar según HTML real
-    for card in cards:
-        title_el = card.select_one(".event-title")
-        date_el = card.select_one(".event-date")
-        time_el = card.select_one(".event-time")
-        link_el = card.select_one("a")
+        title = title_el.get_text(strip=True) if title_el else "Sin título"
+        raw_date = date_el.get_text(strip=True) if date_el else ""
+        start_date = parse_spanish_date_text(raw_date.split()[0]) if raw_date else None
 
-        if not title_el or not date_el:
-            continue
-
-        title = title_el.get_text(strip=True)
-        raw_date = date_el.get_text(strip=True)
-        raw_time = time_el.get_text(strip=True) if time_el else None
-        url = link_el["href"] if link_el else BASE_URL
-
-        # Parse fechas
-        start_date, end_date = parse_date_range(raw_date)
-
-        events.append({
-            "id": f"latermica::{slugify(title)}::{start_date}",
+        items.append({
+            "id": f"latermica-{link_el or title}",
             "title": title,
-            "place": "La Térmica",
-            "url": url,
-            "date_start": start_date,
-            "date_end": end_date,
-            "time": raw_time,
+            "url": link_el,
+            "date": raw_date,
+            "start_date": start_date,
             "source": "latermica",
         })
 
-    return events
-
-
-def parse_date_range(text: str):
-    """
-    Convierte '26 SEP' o '02 OCT – 04 OCT' en (fecha_inicio, fecha_fin).
-    """
-    text = text.upper().strip()
-
-    # Rango de fechas
-    if "–" in text or "-" in text:
-        parts = re.split(r"[–-]", text)
-        start_txt, end_txt = parts[0].strip(), parts[1].strip()
-        start_date = parse_spanish_date_text(start_txt)
-        end_date = parse_spanish_date_text(end_txt)
-        return start_date, end_date
-
-    # Fecha simple
-    return parse_spanish_date_text(text), parse_spanish_date_text(text)
-
-
-def slugify(txt: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "-", txt.lower()).strip("-")
+    return items
