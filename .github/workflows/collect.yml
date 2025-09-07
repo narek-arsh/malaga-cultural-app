@@ -109,24 +109,22 @@ jobs:
           retention-days: 7
 
       # ⬇️ Ajustado: forzamos también data/sources/*
-      - name: Commit changes (if any)
+            - name: Commit changes (if any)
         run: |
-          # Añadimos al commit los ficheros de datos que sí queremos versionar
-          git add -f data/catalog.jsonl data/curated.json data/manual_events.csv data/sources/* || true
+          # Asegura que el directorio existe (por si el scraper aún no crea sources)
+          mkdir -p data/sources
+
+          # Stage de los archivos de datos (nunca añadimos run.log)
+          git add -f data/catalog.jsonl data/curated.json data/manual_events.csv || true
+
+          # Si no hay .json en sources, que no falle:
+          git add -f data/sources/*.json 2>/dev/null || true
+
+          # ¿Hay algo staged?
           if git diff --cached --quiet; then
             echo "No changes to commit."
             exit 0
           fi
+
           ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           git commit -m "chore(data): update cultural catalog ${ts}"
-
-      - name: Push (with auto-rebase retry)
-        run: |
-          set -e
-          if git push origin main; then
-            echo "Pushed OK"
-          else
-            echo "Push failed, rebasing..."
-            git pull --rebase origin main
-            git push origin main
-          fi
