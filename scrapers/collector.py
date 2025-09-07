@@ -1,93 +1,94 @@
-import json, os, sys, logging, hashlib
-from datetime import datetime
-from importlib import import_module
+# -*- coding: utf-8 -*-
+from __future__ import annotations
 
-DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
+import os
+import sys
+import json
+import logging
+from importlib import import_module
+from typing import Any, Dict, List
+
+import yaml
+
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
+logging.basicConfig(
+    level=getattr(logging, LOG_LEVEL, logging.INFO),
+    format="%(asctime)s [%(levelname)s] %(message)s"
+)
+log = logging.getLogger(__name__)
+
+DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
+DATA_DIR = os.path.abspath(DATA_DIR)
 CATALOG = os.path.join(DATA_DIR, "catalog.jsonl")
 CATALOG_LAST_OK = os.path.join(DATA_DIR, "catalog.jsonl.last_ok")
-RUNLOG = os.path.join(DATA_DIR, "run.log")
+CURATED = os.path.join(DATA_DIR, "curated.json")
+MANUAL = os.path.join(DATA_DIR, "manual_events.csv")
+SOURCES_DIR = os.path.join(DATA_DIR, "sources")
+FEEDS = os.path.join(os.path.dirname(__file__), "..", "config", "feeds.yaml")
+FEEDS = os.path.abspath(FEEDS)
 
-logging.basicConfig(stream=sys.stdout, level=os.getenv("LOG_LEVEL","INFO"))
-log = logging.getLogger("collector")
+def ensure_dirs():
+    os.makedirs(DATA_DIR, exist_ok=True)
+    os.makedirs(SOURCES_DIR, exist_ok=True)
 
-def now_iso():
-    return datetime.utcnow().isoformat() + "Z"
+def load_feeds() -> List[Dict[str, Any]]:
+    with open(FEEDS, "r", encoding="utf-8") as f:
+        doc = yaml.safe_load(f)
+    return doc.get("feeds", [])
 
-def write_jsonl(path, items):
+def write_jsonl(path: str, items: List[Dict[str, Any]]):
     with open(path, "w", encoding="utf-8") as f:
         for it in items:
             f.write(json.dumps(it, ensure_ascii=False) + "\n")
 
-def read_jsonl(path):
-    if not os.path.exists(path):
-        return []
-    out = []
-    with open(path, "r", encoding="utf-8") as f:
-        for line in f:
-            line=line.strip()
-            if not line: continue
-            try:
-                out.append(json.loads(line))
-            except Exception:
-                pass
-    return out
-
-def dedup(items):
-    seen=set()
-    out=[]
-    for it in items:
-        key = it.get("id") or hashlib.sha1((it.get("source_id","")+it.get("source_url","")+it.get("titulo","")).encode("utf-8")).hexdigest()[:16]
-        if key in seen: 
-            continue
-        it["id"]=key
-        seen.add(key)
-        out.append(it)
-    return out
-
-FEEDS = [
-    # Ajusta aquí según quieras activar/pausar
-    {"id":"picasso", "active": True, "sections":{"expos": True, "activities": True}},
-    {"id":"latermica", "active": True, "sections":{"activities": True}},
-    # {"id":"thyssen", "active": True, "sections":{"expos": True, "activities": True}},
-    # {"id":"pompidou", "active": True, "sections":{"expos": True, "activities": True}},
-]
-
 def collect():
-    os.makedirs(DATA_DIR, exist_ok=True)
+    ensure_dirs()
     log.info("=== Collector start ===")
-    all_items=[]
+    feeds = load_feeds()
+    all_items: List[Dict[str, Any]] = []
 
-    for feed in FEEDS:
-        iid = feed["id"]
-        if not feed.get("active", True):
+    for feed in feeds:
+        iid = feed.get("id")
+        active = feed.get("active", True)
+        if not active:
             continue
+
+        log.info("[%s] import module", iid)
         try:
-            log.info("[%s] import module", iid)
             mod = import_module(f"scrapers.institutions.{iid}")
         except Exception as e:
-            log.error("[%s] import failed: %s", iid, e, exc_info=True)
+            log.exception("[%s] import failed: %s", iid, e)
             continue
+
         try:
-            items = mod.collect(feed.get("sections", {}))
-            log.info("[%s] total -> %d (written)", iid, len(items))
-            all_items.extend(items)
+            got = mod.collect(feed)
+            log.info("[%s] total -> %d (written)", iid, len(got))
+            all_items.extend(got)
         except Exception as e:
-            log.error("[%s] collect failed: %s", iid, e, exc_info=True)
+            log.exception("[%s] collect failed: %s", iid, e)
 
-    ded = dedup(all_items)
-    log.info("Collected items (dedup): %d", len(ded))
-    if not ded:
+    # dedupe by source_url
+    dedup: Dict[str, Dict[str, Any]] = {}
+    for it in all_items:
+        k = it.get("source_url") or it.get("id") or json.dumps(it, sort_keys=True)
+        dedup[k] = it
+    items = list(dedup.values())
+    log.info("Collected items (dedup): %d", len(items))
+
+    if items:
+        # backup previous ok
+        try:
+            if os.path.exists(CATALOG):
+                with open(CATALOG, "rb") as src, open(CATALOG_LAST_OK, "wb") as dst:
+                    dst.write(src.read())
+        except Exception:
+            pass
+        write_jsonl(CATALOG, items)
+        log.info("[OK] catalog -> %d items", len(items))
+    else:
         log.warning("No items collected. Keeping previous catalog.jsonl (if any).")
-        return
 
-    # mark timestamps/status
-    now = now_iso()
-    for it in ded:
-        it.setdefault("first_seen", now)
-        it["last_seen"] = now
-        it.setdefault("status", "activo")
-        it.setdefault("timezone", "Europe/Madrid")
-        it.setdefault("parse_confidence", 0.7)
+    log.info("=== Collector end ===")
 
-    write_jsonl(CATALOG, ded)
-   
+if __name__ == "__main__":
+    collect()
