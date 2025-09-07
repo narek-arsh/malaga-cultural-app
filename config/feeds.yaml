@@ -1,4 +1,4 @@
-institutions:
+feeds:
   - id: "picasso"
     active: true
     sections:
@@ -7,15 +7,6 @@ institutions:
     urls:
       expos_list: "https://www.museopicassomalaga.org/exposiciones"
       activities_list: "https://www.museopicassomalaga.org/actividades"
-
-  - id: "thyssen"
-    active: true
-    sections:
-      expos: true
-      activities: true
-    urls:
-      expos_list: "https://www.carmenthyssenmalaga.org/exposiciones-temporales"
-      activities_list: "https://www.carmenthyssenmalaga.org/actividades"
 
   - id: "pompidou"
     active: true
@@ -26,10 +17,19 @@ institutions:
       expos_list: "https://centrepompidou-malaga.eu/exposiciones/"
       activities_list: "https://centrepompidou-malaga.eu/events/"
 
+  - id: "thyssen"
+    active: true
+    sections:
+      expos: true
+      activities: true
+    urls:
+      expos_list: "https://www.carmenthyssenmalaga.org/exposiciones-temporales"
+      activities_list: "https://www.carmenthyssenmalaga.org/actividades"
+
   - id: "latermica"
     active: true
     sections:
+      expos: false
       activities: true
     urls:
-      activities_list: "https://www.latermicamalaga.com/agenda/"
-   
+      base: "https://www.latermicamalaga.com/"
