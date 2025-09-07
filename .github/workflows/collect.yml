@@ -53,15 +53,45 @@ jobs:
           git config user.email "github-actions@users.noreply.github.com"
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
+      # ✅ Nuevo: asegura árbol limpio antes de rebase/pull
+      - name: Ensure clean working tree (stash or reset)
+        run: |
+          # Si hay cambios en ficheros versionados (p.ej., un run.log antiguo), los guardamos temporalmente
+          if ! git diff --quiet || ! git diff --cached --quiet; then
+            echo "Working tree not clean. Stashing..."
+            git stash push -u -m "pre-pull stash" || true
+          fi
+
       - name: Pull (rebase) latest main BEFORE running collector
         run: |
           git fetch origin main
           git checkout main
           git pull --rebase origin main
 
+      # 🧪 Opcional: snapshot HTML/headers de Actividades (Picasso) para depurar parsers
+      - name: Snapshot Picasso actividades (debug)
+        run: |
+          mkdir -p data/sources
+          URL="https://www.museopicassomalaga.org/actividades"
+          TS=$(date -u +%Y%m%dT%H%M%SZ)
+          STATUS=$(curl -s -o /tmp/picasso_acts.html -D /tmp/picasso_acts.headers -w "%{http_code}" "$URL" || true)
+
+          # Guardamos el HTML crudo (útil para ver cambios de estructura)
+          cp /tmp/picasso_acts.html "data/sources/picasso_actividades.html" || true
+
+          # Generamos un JSON sencillo con metadatos
+          {
+            echo "{"
+            echo "  \"fetched_at\": \"${TS}\","
+            echo "  \"url\": \"${URL}\","
+            echo "  \"status_code\": ${STATUS},"
+            echo "  \"encoding\": \"utf-8\""
+            echo "}"
+          } > "data/sources/picasso_actividades.json"
+
       - name: Run collector
         env:
-          LOG_LEVEL: ${{ inputs.log_level || 'INFO' }}
+          LOG_LEVEL: ${{ inputs.log_level && inputs.log_level || 'INFO' }}
         run: |
           mkdir -p data
           echo "Run started: $(date -u +%Y-%m-%dT%H:%M:%SZ)" > data/run.log
@@ -78,11 +108,11 @@ jobs:
           path: data/run.log
           retention-days: 7
 
-      # Importante: no añadimos run.log al commit
+      # ⬇️ Ajustado: forzamos también data/sources/*
       - name: Commit changes (if any)
         run: |
-          # Ajusta la lista a lo que quieras versionar
-          git add -f data/catalog.jsonl data/curated.json data/manual_events.csv || true
+          # Añadimos al commit los ficheros de datos que sí queremos versionar
+          git add -f data/catalog.jsonl data/curated.json data/manual_events.csv data/sources/* || true
           if git diff --cached --quiet; then
             echo "No changes to commit."
             exit 0
@@ -91,7 +121,6 @@ jobs:
           git commit -m "chore(data): update cultural catalog ${ts}"
 
       - name: Push (with auto-rebase retry)
-        if: success()
         run: |
           set -e
           if git push origin main; then
