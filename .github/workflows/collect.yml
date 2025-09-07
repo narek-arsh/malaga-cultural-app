@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       log_level:
-        description: "LOG_LEVEL for collector (DEBUG/INFO/WARNING)"
+        description: "LOG_LEVEL for collector"
         required: false
         default: "INFO"
         type: choice
@@ -57,7 +57,11 @@ jobs:
         run: |
           git fetch origin main
           git checkout main
+          # si hubiera cambios locales sueltos, los guardamos temporalmente
+          (git diff --quiet || git stash) || true
           git pull --rebase origin main
+          # y si hubo stash, lo aplicamos
+          (git stash list | grep -q "stash@{0}") && git stash pop || true
 
       - name: Run collector
         env:
@@ -80,24 +84,15 @@ jobs:
 
       - name: Commit changes (if any)
         run: |
-          # Asegura que el directorio existe
-          mkdir -p data/sources
-
-          # Stage de los archivos de datos (excepto run.log)
           git add -f data/catalog.jsonl data/curated.json data/manual_events.csv || true
-          git add -f data/sources/*.json 2>/dev/null || true
-
-          # ¿Hay algo staged?
           if git diff --cached --quiet; then
             echo "No changes to commit."
             exit 0
           fi
-
           ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           git commit -m "chore(data): update cultural catalog ${ts}"
 
       - name: Push (with auto-rebase retry)
-        if: success()
         run: |
           set -e
           if git push origin main; then
